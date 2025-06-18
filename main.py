@@ -1,52 +1,50 @@
-# amongus_aiogram_bot.py
-
 import asyncio
 import json
 import os
 from pathlib import Path
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton, 
-                           ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton)
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.utils.markdown import hbold
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# === Constants ===
+TOKEN = os.getenv("7744582303:AAHRSRSGWRXafEexdx59hQQ6pj8N2dvgl9g")
+if TOKEN is None:
+    raise RuntimeError("Ошибка: не найден BOT_TOKEN в переменных окружения")
+
 MAPS = ["The Skeld", "MIRA HQ", "Polus", "The Airship", "Fungle"]
 MODES = ["Классика", "Прятки", "Много ролей", "Моды", "Баг"]
 GAMES_FILE = Path("games.json")
 games = {}
 
-# === FSM States ===
 class RoomState(StatesGroup):
     host = State()
     room = State()
     map = State()
     mode = State()
 
-# === Keyboards ===
 main_menu = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="/newroom"), KeyboardButton(text="/list")],
-              [KeyboardButton(text="/help"), KeyboardButton(text="/cancel")]],
+    keyboard=[
+        [KeyboardButton("/newroom"), KeyboardButton("/list")],
+        [KeyboardButton("/help"), KeyboardButton("/cancel")]
+    ],
     resize_keyboard=True
 )
 
 maps_menu = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text=m)] for m in MAPS] + [[KeyboardButton(text="Отмена")]],
+    keyboard=[[KeyboardButton(m)] for m in MAPS] + [[KeyboardButton("Отмена")]],
     resize_keyboard=True, one_time_keyboard=True
 )
 
 modes_menu = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text=m)] for m in MODES] + [[KeyboardButton(text="Изменить карту"), KeyboardButton(text="Отмена")]],
+    keyboard=[[KeyboardButton(m)] for m in MODES] + [[KeyboardButton("Изменить карту"), KeyboardButton("Отмена")]],
     resize_keyboard=True, one_time_keyboard=True
 )
 
-# === Utils ===
 def save_games():
     temp = {code: {k: v for k, v in g.items() if k != "task"} for code, g in games.items()}
     with open(GAMES_FILE, "w", encoding="utf-8") as f:
@@ -69,8 +67,6 @@ async def auto_delete_game(code: str):
     except asyncio.CancelledError:
         pass
 
-# === Handlers ===
-
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 Добро пожаловать в бот Among Us!\n\n"
@@ -83,7 +79,10 @@ async def cmd_start(message: types.Message):
     )
 
 async def cmd_help(message: types.Message):
-    await message.answer("📖 Команды:\n/newroom — создать\n/list — список\n/cancel — отменить\n/help — помощь", reply_markup=main_menu)
+    await message.answer(
+        "📖 Команды:\n/newroom — создать\n/list — список\n/cancel — отменить\n/help — помощь",
+        reply_markup=main_menu
+    )
 
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
@@ -141,6 +140,7 @@ async def input_mode(message: types.Message, state: FSMContext):
 
     data = await state.get_data()
     room_code = data["room"]
+
     if (old_task := games.get(room_code, {}).get("task")):
         old_task.cancel()
     task = asyncio.create_task(auto_delete_game(room_code))
@@ -223,18 +223,18 @@ async def handle_callback(callback: types.CallbackQuery, state: FSMContext):
                 parse_mode="HTML"
             )
 
-# === Entry point ===
-
+# === Основной запуск бота ===
 async def main():
-    load_games()
-    bot = Bot(token=os.getenv("BOT_TOKEN"), parse_mode="HTML")
+    bot = Bot(token=TOKEN, parse_mode="HTML")
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.message.register(cmd_start, F.text == "/start")
-    dp.message.register(cmd_help, F.text == "/help")
-    dp.message.register(cmd_cancel, F.text == "/cancel")
-    dp.message.register(newroom, F.text == "/newroom")
-    dp.message.register(list_rooms, F.text == "/list")
+    load_games()
+
+    dp.message.register(cmd_start, commands=["start"])
+    dp.message.register(cmd_help, commands=["help"])
+    dp.message.register(cmd_cancel, commands=["cancel"], state="*")
+    dp.message.register(newroom, commands=["newroom"])
+    dp.message.register(list_rooms, commands=["list"])
 
     dp.message.register(input_host, RoomState.host)
     dp.message.register(input_room, RoomState.room)
@@ -246,4 +246,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
